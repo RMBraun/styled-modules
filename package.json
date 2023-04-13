@@ -1,0 +1,37 @@
+{
+  "name": "@rybr/styled-modules",
+  "version": "1.0.0",
+  "description": "Styled lets you create React components with bound css modules and dynamic css properties",
+  "main": "./dist/index.js",
+  "files": [
+    "./dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RMBraun/styled-modules.git"
+  },
+  "keywords": [
+    "React",
+    "styled-components",
+    "css",
+    "modules"
+  ],
+  "author": "Ryan Braun",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/RMBraun/styled-modules/issues"
+  },
+  "homepage": "https://github.com/RMBraun/styled-modules#readme",
+  "dependencies": {
+    "@types/node": "18.15.11",
+    "@types/react": "18.0.31",
+    "@types/react-dom": "18.0.11",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "typescript": "5.0.2"
+  }
+}
