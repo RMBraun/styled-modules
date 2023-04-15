@@ -1,45 +1,45 @@
-import React, { useMemo } from 'react'
-type Props = Record<string, unknown>
-
 // type MergeProps<U extends Props | undefined> = {
 //   [K in U extends Props ? keyof U : never]: U extends Props ? (K extends keyof U ? U[K] : never) : never
 // }
 
-type StyledFunction<P = Props> = (props: P) => React.CSSProperties
+import React, { useMemo } from 'react'
+
+type Props = Record<string, unknown>
+
+type StyledFunction<P = Props> = (props: P) => React.CSSProperties | undefined
 
 type TagNames = keyof JSX.IntrinsicElements
 
 type StyledComponent<Tag extends TagNames, P extends { css?: Props }> = React.FC<P & JSX.IntrinsicElements[Tag]> & {
-  _styled_props: P['css']
-  _styled_className: string | null | undefined
-  _styled_styleFunctions: Array<StyledFunction<any>>
+  className: string | undefined
+  styleFunction: StyledFunction<any>
 }
 
-export function styled<Tag extends TagNames>(
+function styled<Tag extends TagNames>(
   tagName: Tag,
   extendsFrom?: null | undefined,
   styleFunction?: null | undefined
 ): StyledComponent<Tag, { css?: undefined }>
 
-export function styled<Tag extends TagNames>(
+function styled<Tag extends TagNames>(
   tagName: Tag,
-  extendsFrom: string | Array<string>,
+  extendsFrom: string | Array<string | null | undefined>,
   styleFunction?: null | undefined
 ): StyledComponent<Tag, { css?: undefined }>
 
-export function styled<Tag extends TagNames, ExtendsCssProps extends { css?: Props }>(
+function styled<Tag extends TagNames, ExtendsCssProps extends { css?: Props }>(
   tagName: Tag,
   extendsFrom: StyledComponent<any, ExtendsCssProps>,
   styleFunction?: null | undefined
 ): StyledComponent<Tag, ExtendsCssProps['css'] extends undefined ? {} : ExtendsCssProps>
 
-export function styled<CssProps extends Props, Tag extends TagNames>(
+function styled<CssProps extends Props, Tag extends TagNames>(
   tagName: Tag,
-  extendsFrom: string | Array<string>,
+  extendsFrom: string | Array<string | null | undefined>,
   styleFunction: StyledFunction<CssProps>
 ): StyledComponent<Tag, { css: CssProps }>
 
-export function styled<CssProps extends Props, Tag extends TagNames, ExtendsCssProps extends { css?: Props }>(
+function styled<CssProps extends Props, Tag extends TagNames, ExtendsCssProps extends { css?: Props }>(
   tagName: Tag,
   extendsFrom: StyledComponent<any, ExtendsCssProps>,
   styleFunction: StyledFunction<CssProps>
@@ -48,7 +48,7 @@ export function styled<CssProps extends Props, Tag extends TagNames, ExtendsCssP
   ExtendsCssProps['css'] extends undefined ? { css: CssProps } : { css: CssProps & ExtendsCssProps['css'] }
 >
 
-export function styled<
+function styled<
   CssProps extends Props,
   Tag extends TagNames,
   ExtendsCssProps extends { css?: Props },
@@ -58,44 +58,66 @@ export function styled<
   >
 >(
   tagName: Tag,
-  extendsFrom?: string | StyledComponent<any, ExtendsCssProps> | Array<string> | null | undefined,
+  extendsFrom?: string | StyledComponent<any, ExtendsCssProps> | Array<string | null | undefined> | null | undefined,
   styleFunction?: StyledFunction<CssProps> | null | undefined
 ): ReturnType {
-  const parentClassName =
-    extendsFrom == null || typeof extendsFrom === 'string'
-      ? extendsFrom
-      : Array.isArray(extendsFrom)
-      ? extendsFrom.join(' ')
-      : extendsFrom._styled_className
+  if (typeof tagName !== 'string') {
+    throw new Error('tagName must be a valid JSX element tag name')
+  }
 
-  const parentStyleFunctions =
+  if (
+    extendsFrom != null &&
+    typeof extendsFrom !== 'string' &&
+    !(Array.isArray(extendsFrom) && extendsFrom.every((value) => value == null || typeof value === 'string')) &&
+    !('styleFunction' in extendsFrom)
+  ) {
+    throw new Error('extendsFrom must be a String, StyledComponent, or Array<String>')
+  }
+
+  if (styleFunction != null && typeof styleFunction !== 'function') {
+    throw new Error('styleFunction must be a function that returns React.CSSProperties')
+  }
+
+  const parentClassName =
+    extendsFrom == null
+      ? undefined
+      : typeof extendsFrom === 'string'
+      ? extendsFrom.trim()
+      : Array.isArray(extendsFrom)
+      ? Array.from(
+          new Set(
+            extendsFrom.flatMap((value) => value?.split(' ')?.map((value) => value.trim())).filter((value) => !!value)
+          )
+        ).join(' ')
+      : extendsFrom.className
+
+  const parentStyleFunction =
     extendsFrom == null ||
     typeof extendsFrom === 'string' ||
     Array.isArray(extendsFrom) ||
-    extendsFrom._styled_styleFunctions == null
-      ? []
-      : extendsFrom?._styled_styleFunctions
+    extendsFrom.styleFunction == null
+      ? null
+      : extendsFrom.styleFunction
 
-  const mergedStyleFunctions = styleFunction ? [...parentStyleFunctions, styleFunction] : parentStyleFunctions
+  const mergedStyleFunction = (css?: CssProps) =>
+    css == null ? undefined : Object.assign({}, parentStyleFunction?.(css) ?? {}, styleFunction?.(css) ?? {})
 
   const component = React.forwardRef(function Styled(
-    { css, className, ...props }: { css?: CssProps; className?: string; style: React.CSSProperties },
+    props: { css?: CssProps; className?: string; style: React.CSSProperties },
     ref
   ) {
     return React.createElement(tagName, {
       ...props,
       ref,
-      className: useMemo(
-        () => (className && parentClassName ? `${className} ${parentClassName}` : className ?? parentClassName),
-        [className]
-      ),
-      style: useMemo(() => css && Object.assign({}, ...mergedStyleFunctions.map((func) => func(css))), [css]),
+      className: useMemo(() => `${props.className || ''} ${parentClassName || ''}`.trim(), [props.className]),
+      style: useMemo(() => mergedStyleFunction(props.css), [props.css]),
     })
   }) as unknown as ReturnType
 
-  // TODO might need to make this an array to hold history.. not sure if we can nest multiple times
-  component._styled_className = parentClassName
-  component._styled_styleFunctions = mergedStyleFunctions
+  component.className = parentClassName
+  component.styleFunction = mergedStyleFunction
 
   return component
 }
+
+export default styled
