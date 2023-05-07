@@ -1,10 +1,18 @@
-import React, { useMemo } from 'react'
+import React, { CSSProperties } from 'react'
+
+type CSSPropertyKeys = keyof React.CSSProperties
+
+type RawCSSProperties = {
+  [K in `_${CSSPropertyKeys}`]?: K extends `_${infer CssName}`
+    ? CssName extends CSSPropertyKeys
+      ? CSSProperties[CssName]
+      : never
+    : never
+}
 
 type Props = Record<string, unknown>
 
-type StyledFunction<P = Props> = (
-  props: P
-) => React.CSSProperties | (React.CSSProperties & Record<string, unknown>) | undefined
+type StyledFunction<P = Props> = (props: P) => (CSSProperties & RawCSSProperties & Record<string, unknown>) | undefined
 
 type TagNames = keyof JSX.IntrinsicElements
 
@@ -83,7 +91,7 @@ export default new Proxy(
     }
 
     if (styleFunction != null && typeof styleFunction !== 'function') {
-      throw new Error('styleFunction must be a function that returns React.CSSProperties')
+      throw new Error('styleFunction must be a function that returns CSSProperties')
     }
 
     const parentClassName =
@@ -107,22 +115,30 @@ export default new Proxy(
         ? null
         : extendsFrom.styleFunction
 
-    const mergedStyleFunction = (css?: Props) =>
-      css == null ? undefined : Object.assign({}, parentStyleFunction?.(css) ?? {}, styleFunction?.(css) ?? {})
+    const mergedStyleFunction = (css: Props = {}) =>
+      Object.assign({}, parentStyleFunction?.(css) ?? {}, styleFunction?.(css) ?? {})
 
-    const component = React.forwardRef(function Styled(
-      props: { css?: Props; className?: string; style: React.CSSProperties },
-      ref
-    ) {
-      const { css, className, style, ...rest } = props
+    const component = React.memo(
+      React.forwardRef(function Styled(props: { css?: Props; className?: string; style: CSSProperties }, ref) {
+        const { css, className, style, ...rest } = props
 
-      return React.createElement(tagName, {
-        ...rest,
-        ref,
-        className: useMemo(() => `${className || ''} ${parentClassName || ''}`.trim(), [className]),
-        style: useMemo(() => mergedStyleFunction(css), [css]),
+        return React.createElement(tagName, {
+          ...rest,
+          ref,
+          className: React.useMemo(() => `${className || ''} ${parentClassName || ''}`.trim(), [className]),
+          style: React.useMemo(
+            () =>
+              Object.fromEntries(
+                Object.entries(mergedStyleFunction(css)).map(([key, value]) => [
+                  key.startsWith('_') ? key.slice(1) : `--${key}`,
+                  value,
+                ])
+              ),
+            [css]
+          ),
+        })
       })
-    }) as unknown as StyledComponent<string, any>
+    ) as unknown as StyledComponent<string, any>
 
     component.className = parentClassName
     component.styleFunction = mergedStyleFunction
