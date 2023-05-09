@@ -59,18 +59,6 @@ type Styled<Tag extends string = CustomTag> = {
   >
 }
 
-export const css = (chunks: Array<string>, ...args: Array<string>) =>
-  chunks
-    .reduce((acc, chunk, i) => (acc ?? '') + (chunk ?? '') + (args[i] ?? ''), '')
-    .split(';')
-    .map((chunk) =>
-      chunk
-        .split(':')
-        .map((value) => value.trim())
-        .join(':')
-    )
-    .join(';')
-
 export default new Proxy(
   function (
     tagName: string,
