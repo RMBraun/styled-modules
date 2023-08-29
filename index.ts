@@ -1,25 +1,20 @@
 import React, { CSSProperties } from 'react'
 
-const CSS_PROP_PREFIX = '$'
-const EXTENDS_TAGNAME = '_extend'
+const CSS_PROP_PREFIX = '$' as const
+type CSS_PROP_PREFIX = typeof CSS_PROP_PREFIX
+
+const EXTENDS_TAGNAME = '$' as const
+type EXTENDS_TAGNAME = typeof CSS_PROP_PREFIX
 
 type Props = Record<string, unknown>
 
-type MergeProps<P1 extends Props | undefined, P2 extends Props | undefined> = P2 extends undefined
-  ? P1 extends undefined
+type MergeProps<P1 extends Props | undefined, P2 extends Props | undefined> = P1 extends undefined
+  ? P2 extends undefined
     ? {}
-    : P1
-  : P1 extends undefined
-  ? P2
-  : {
-      [K in keyof P1 | keyof P2]: K extends keyof P1
-        ? K extends keyof P2
-          ? P1[K] | P2[K]
-          : P1[K]
-        : K extends keyof P2
-        ? P2[K]
-        : never
-    }
+    : P2
+  : P2 extends undefined
+  ? P1
+  : P1 & Omit<P2, keyof P1>
 
 type CssValue<K extends keyof CSSProperties> =
   | CSSProperties[K]
@@ -62,10 +57,14 @@ type Styled<Tag extends string = string, ExtendsCssProps extends Props | undefin
     ExtendsCssProps extends undefined ? {} : ExtendsCssProps
   >
 
-  <CssProps extends Props | undefined = undefined>(
+  <
+    CssProps extends ExtendsCssProps extends Props ? { [K in keyof ExtendsCssProps]?: never } & Props : Props,
+    MergedProps extends MergeProps<ExtendsCssProps, CssProps> = MergeProps<ExtendsCssProps, CssProps>,
+    PrettyProps extends { [K in keyof MergedProps]: MergedProps[K] } = { [K in keyof MergedProps]: MergedProps[K] }
+  >(
     classNames: string | null | undefined | Array<string | null | undefined>,
-    styleFunction?: CssFunction<MergeProps<CssProps, ExtendsCssProps>>
-  ): StyledComponent<Tag, MergeProps<CssProps, ExtendsCssProps>>
+    styleFunction?: CssFunction<PrettyProps>
+  ): StyledComponent<Tag, PrettyProps>
 }
 
 const cleanCssPropKey = (key: string) => (key.startsWith('_') ? key.slice(1) : `--${key}`)
@@ -76,8 +75,8 @@ const getMergedStyleFunction =
     Object.assign({}, ...funcs.map((func) => func?.(css ?? {}) ?? {}))
 
 const mergeClassNames = (...args: Array<string | null | undefined | Array<string | null | undefined>>): string =>
-  [
-    ...new Set(
+  Array.from(
+    new Set(
       args
         .flat()
         .filter((value): value is string => typeof value === 'string')
@@ -88,21 +87,21 @@ const mergeClassNames = (...args: Array<string | null | undefined | Array<string
             ?.map((value) => value.trim())
         )
         .filter((value) => !!value)
-    ),
-  ].join(' ')
+    )
+  ).join(' ')
 
 const getTagName = (tagName: string, extendsFrom?: StyledComponent<any, any> | null): string =>
   tagName === EXTENDS_TAGNAME && extendsFrom?.tagName ? extendsFrom.tagName : tagName
 
-const shallowAreDifferent = (prevProps: Props, props: Props): boolean => {
-  const propKeys = Object.keys(props)
-  const prevPropKeys = Object.keys(prevProps)
+// const shallowAreDifferent = (prevProps: Props, props: Props): boolean => {
+//   const propKeys = Object.keys(props)
+//   const prevPropKeys = Object.keys(prevProps)
 
-  return (
-    propKeys.length !== prevPropKeys.length ||
-    Object.keys(props).some((key) => !(key in prevProps) || props[key] !== prevProps[key])
-  )
-}
+//   return (
+//     propKeys.length !== prevPropKeys.length ||
+//     Object.keys(props).some((key) => !(key in prevProps) || props[key] !== prevProps[key])
+//   )
+// }
 
 function createdStyledComponent<T extends Tags>(
   tagName: string,
@@ -119,7 +118,7 @@ function createdStyledComponent<T extends Tags>(
   }
 
   if (tagName === EXTENDS_TAGNAME && extendsFrom == null) {
-    throw new Error(' "_extend" tag name can only be used while extending from a StyledComponent')
+    throw new Error(`"${EXTENDS_TAGNAME}" tag name can only be used while extending from a StyledComponent`)
   }
 
   if (
@@ -140,50 +139,47 @@ function createdStyledComponent<T extends Tags>(
 
   const mergedStyleFunction = getMergedStyleFunction(extendsFrom?.styleFunction, styleFunction)
 
-  let cachedProps = {}
-  let cachedElement: React.ReactElement | null = null
+  const component = React.memo(
+    React.forwardRef(function Styled(
+      { children, ...props }: Props & { className?: string; style?: CSSProperties; children?: React.ReactNode },
+      ref
+    ) {
+      const formattedProps = Object.fromEntries(
+        Object.entries(props).map(([key, value]) => [key.startsWith(CSS_PROP_PREFIX) ? key.slice(1) : key, value])
+      )
 
-  const component = React.forwardRef(function Styled(
-    { children, ...props }: Props & { className?: string; style?: CSSProperties; children?: React.ReactNode },
-    ref
-  ) {
-    if (cachedElement != null && !shallowAreDifferent(cachedProps, props)) {
-      return cachedElement
-    }
+      const rawStyleObject = mergedStyleFunction(formattedProps)
 
-    const formattedProps = Object.fromEntries(
-      Object.entries(props).map(([key, value]) => [key.startsWith(CSS_PROP_PREFIX) ? key.slice(1) : key, value])
-    )
+      const formattedStyleObject = Object.fromEntries(
+        Object.entries(rawStyleObject).flatMap(([key, value]) => {
+          const formattedKey = cleanCssPropKey(key)
 
-    const rawStyleObject = mergedStyleFunction(formattedProps)
+          return value == null || value == ''
+            ? []
+            : typeof value === 'object'
+            ? Object.entries(value).map(([subKey, subValue]) => [
+                subKey === 'base' ? formattedKey : `${formattedKey}_${subKey}`,
+                subValue,
+              ])
+            : [[formattedKey, value]]
+        })
+      )
 
-    const formattedStyleObject = Object.fromEntries(
-      Object.entries(rawStyleObject).flatMap(([key, value]) => {
-        const formattedKey = cleanCssPropKey(key)
+      const sanitizedProps = Object.fromEntries(
+        Object.entries(props).filter(([key]) => !key.startsWith(CSS_PROP_PREFIX))
+      )
 
-        return value == null || value == ''
-          ? []
-          : typeof value === 'object'
-          ? Object.entries(value).map(([subKey, subValue]) => [
-              subKey === 'base' ? formattedKey : `${formattedKey}_${subKey}`,
-              subValue,
-            ])
-          : [[formattedKey, value]]
-      })
-    )
+      const mergedProps = {
+        ...sanitizedProps,
+        ref,
+        className: `${props.className || ''} ${mergedClassNames || ''}`.trim() || null,
+        style: Object.assign(formattedStyleObject, props.style ?? {}),
+        children,
+      }
 
-    const sanitizedProps = Object.fromEntries(Object.entries(props).filter(([key]) => !key.startsWith(CSS_PROP_PREFIX)))
-
-    const mergedProps = {
-      ...sanitizedProps,
-      ref,
-      className: `${props.className || ''} ${mergedClassNames || ''}`.trim() || null,
-      style: Object.assign(formattedStyleObject, props.style ?? {}),
-      children: ([] as React.ReactNode[]).concat(children),
-    }
-
-    return (cachedElement = React.createElement(derivedTagName, mergedProps))
-  }) as unknown as StyledComponent<T, any>
+      return React.createElement(derivedTagName, mergedProps)
+    })
+  ) as unknown as StyledComponent<T, any>
 
   component.tagName = derivedTagName
   component.className = mergedClassNames
@@ -205,7 +201,7 @@ const styledProxy = <ExtendsCssProps extends Props, Tag extends TagNames | strin
     }
   ) as {
     [K in keyof JSX.IntrinsicElements]: Styled<K, ExtendsCssProps>
-  } & { _extend: Styled<Tag, ExtendsCssProps> } & { [K: string]: Styled<typeof K, ExtendsCssProps> }
+  } & { [K in EXTENDS_TAGNAME]: Styled<Tag, ExtendsCssProps> } & { [K: string]: Styled<typeof K, ExtendsCssProps> }
 
 const styled = new Proxy(styledProxy, {
   get(target, key: string) {
