@@ -22,7 +22,7 @@ const createSizeVariables = <
   prefix,
   incrementBy = 0.25,
   units = 'rem',
-  calc = ((index) => `${index * incrementBy}${units}`) as O['calc'],
+  calc = ((index) => `${(index * incrementBy).toFixed(2)}${units}`) as O['calc'],
 }: {
   steps?: S
   prefix: P
@@ -38,7 +38,7 @@ const createSizeVariables = <
       get(target, key: string) {
         return key in target || !key.startsWith(prefix)
           ? target[key]
-          : (target[key] = calc(parseInt(key.split(prefix).pop() ?? '0') || 0))
+          : (target[key] = calc(parseInt(key.split('-').pop() ?? '0') || 0))
       },
     }),
   } as O
@@ -83,13 +83,13 @@ const createHslaColorVariables = <
       get(target, key: string) {
         return key in target || !key.startsWith(prefix)
           ? target[key]
-          : (target[key] = calc(parseInt(key.split(prefix).pop() ?? '0') || 0))
+          : (target[key] = calc(parseInt(key.split('-').pop() ?? '0') || 0))
       },
     }),
   } as O
 }
 
-const createTheme = <
+const createGlobalCss = <
   R extends {
     [K in UnionToIntersection<V[number]['values']>]: `var(--${K})`
   } & {
@@ -112,12 +112,12 @@ const createTheme = <
             new Array(steps).fill(null).map((_, i) => {
               const value = calc(i + 1)
 
-              return value == null ? value : `--${prefix}-${i + 1}:${value};`
+              return value && `--${prefix}-${i + 1}:${value};`
             })
           )
           .filter((x) => x)
           // Replace with empty string
-          .join('\r'),
+          .join(''),
     } as Record<string, string> & { toCss: () => string },
     {
       get(target, key: string) {
@@ -129,16 +129,7 @@ const createTheme = <
   ) as R
 }
 
-const color = createHslaColorVariables({
-  prefix: 'sm-color-red',
-  steps: 9,
-  hue: 0,
-  saturation: 100,
-})
-const sizes = createSizeVariables({ prefix: 'sm-size', steps: 5 })
-const fontSizes = createSizeVariables({ prefix: 'sm-fontSize', steps: 5 })
-
-const theme = createTheme(
+const globalCss = createGlobalCss(
   createHslaColorVariables({
     prefix: 'sm-color-red',
     steps: 9,
@@ -146,20 +137,48 @@ const theme = createTheme(
     saturation: 100,
   }),
   createSizeVariables({ prefix: 'sm-size', steps: 5 }),
-  createSizeVariables({ prefix: 'sm-fontSize', steps: 3 })
+  createSizeVariables({ prefix: 'sm-fontSize', steps: 3, incrementBy: 0.1 }),
+  createHslaColorVariables({
+    prefix: 'sm-color-red',
+    steps: 9,
+    hue: 0,
+    saturation: 100,
+  })
 )
 
-// console.log(theme["sm-size-1"]);
-// console.log(theme["sm-size-2"]);
-// console.log(theme["sm-size-3"]);
-// console.log(theme["sm-size-4"]);
-// console.log(theme["sm-size-5"]);
+/**
+ * Enforces all themes have the same keys and gives typing to the main theme object
+ */
+const createThemes = <ThemeKeys extends string, CssKeys extends string>(
+  themes: Record<ThemeKeys, { [K in CssKeys]: string }>
+): Record<ThemeKeys, { [K in CssKeys]: string }> => themes
 
-// console.log(theme["sm-fontSize-1"]);
-// console.log(theme["sm-fontSize-2"]);
-// console.log(theme["sm-fontSize-3"]);
-// console.log(theme["sm-fontSize-4"]);
-// console.log(theme["sm-fontSize-5"]);
+const themes = createThemes({
+  light: {
+    a: 'blue',
+  },
+  dark: {
+    a: 'black',
+  },
+})
 
-// console.log(theme)
-console.log(theme.toCss())
+const getStyledWithThemes = <ThemeKeys extends string, CssKeys extends string>(
+  themes: Record<ThemeKeys, { [K in CssKeys]: string }>
+): Record<ThemeKeys, { [K in CssKeys]: string }> => themes
+
+// console.log(sizes.values['sm-size-3'])
+
+// console.log(globalCss["sm-size-1"]);
+// console.log(globalCss["sm-size-2"]);
+// console.log(globalCss["sm-size-3"]);
+// console.log(globalCss["sm-size-4"]);
+// console.log(globalCss["sm-size-5"]);
+
+// console.log(globalCss["sm-fontSize-1"]);
+// console.log(globalCss["sm-fontSize-2"]);
+// console.log(globalCss["sm-fontSize-3"]);
+// console.log(globalCss["sm-fontSize-4"]);
+// console.log(globalCss["sm-fontSize-5"]);
+
+// console.log(globalCss)
+// console.log(globalCss.toCss());
