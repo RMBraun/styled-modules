@@ -1,6 +1,6 @@
 {
   "name": "@rybr/styled-modules",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Styled lets you create React components using styled-component syntax with bound css modules and dynamic css properties",
   "main": "./dist/index.js",
   "files": [
