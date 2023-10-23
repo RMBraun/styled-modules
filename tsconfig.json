@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "jsx": "react",
     "target": "ES6",
     "lib": [
       "DOM",
@@ -17,7 +18,10 @@
     "outDir": "dist"
   },
   "files": [
-    "index.ts"
+    "index.ts",
+    "styled.ts",
+    "theme.ts",
+    "ThemeProvider.tsx"
   ],
   "exclude": [
     "node_modules",
