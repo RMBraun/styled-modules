@@ -44,7 +44,7 @@ type StyledComponentHiddenProps = {
   styleFunction: CssFunction
 }
 
-type StyledComponent<Tag extends Tags, P extends Props> = React.FC<
+export type StyledComponent<Tag extends Tags, P extends Props> = React.FC<
   {
     [K in keyof P as `$${K & string}`]: P[K]
   } & (Tag extends TagNames ? JSX.IntrinsicElements[Tag] : BasicElementAttributes)
@@ -119,7 +119,7 @@ function createdStyledComponent<T extends Tags>(
     throw new Error('styleFunction must be a function that returns CSSProperties')
   }
 
-  const mergedClassNames = mergeClassNames(extendsFrom?.className, classNames)
+  const mergedClassNames = mergeClassNames(classNames, extendsFrom?.className)
 
   const derivedTagName = getTagName(tagName, extendsFrom)
 
@@ -140,7 +140,7 @@ function createdStyledComponent<T extends Tags>(
         Object.entries(rawStyleObject).flatMap(([key, value]) => {
           const formattedKey = cleanCssPropKey(key)
 
-          return value == null || value == ''
+          return value == null || value === ''
             ? []
             : typeof value === 'object'
             ? Object.entries(value).map(([subKey, subValue]) => [
@@ -175,7 +175,7 @@ function createdStyledComponent<T extends Tags>(
   return component
 }
 
-const styledProxy = <ExtendsCssProps extends Props, Tag extends TagNames | string = string>(
+const extendFrom = <ExtendsCssProps extends Props, Tag extends TagNames | string = string>(
   extendsFrom?: StyledComponent<Tag, ExtendsCssProps>
 ) =>
   new Proxy(
@@ -187,14 +187,16 @@ const styledProxy = <ExtendsCssProps extends Props, Tag extends TagNames | strin
     }
   ) as {
     [K in keyof JSX.IntrinsicElements]: Styled<K, ExtendsCssProps>
-  } & { [K in EXTENDS_TAGNAME]: Styled<Tag, ExtendsCssProps> } & { [K: string]: Styled<typeof K, ExtendsCssProps> }
+  } & { [K in EXTENDS_TAGNAME]: Styled<Tag, ExtendsCssProps> } & {
+    [K: string]: Styled<typeof K, ExtendsCssProps>
+  }
 
-export const styled = new Proxy(styledProxy, {
+export const styled = new Proxy(extendFrom, {
   get(target, key: string) {
     return (...args: any[]) => target()?.[key]?.(...args)
   },
-}) as typeof styledProxy & {
-  [K in keyof JSX.IntrinsicElements]: Styled<K>
-} & { [K: string]: Styled<string> }
+}) as typeof extendFrom & {
+  [K in keyof JSX.IntrinsicElements]: Styled<K, undefined>
+} & { [K: string]: Styled<string, undefined> }
 
 export type StyledProps<T extends StyledComponent<any, any>> = Parameters<T>[0]
